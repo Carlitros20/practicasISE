@@ -1,0 +1,74 @@
+#!/bin/bash
+# ==========================================================
+# Script: backup_cliente.sh
+# Práctica 2 - Ingeniería de Servidores
+# Lección 2: Copias de seguridad del cliente de e-commerce
+# ==========================================================
+
+# --- VARIABLES ---
+USUARIO=$(whoami)
+HOME_DIR="/home/$USUARIO"
+FECHA=$(date +"%Y%m%d_%H%M%S")
+BACKUP_FILE="$HOME_DIR/backup_${USUARIO}_${FECHA}.tar.gz"
+DUMP_FILE="$HOME_DIR/db_dump_${FECHA}.sql"
+
+# --- PARTE 1: Volcado de base de datos ---
+# Si no se conoce el nombre de la base de datos, se puede dejar genérico o simularlo.
+# Sustituir "nombre_bd", "usuario_bd" y "contraseña" por los reales si se conocen.
+echo "[+] Realizando volcado de base de datos (si aplica)..."
+if command -v mysqldump >/dev/null 2>&1; then
+    mysqldump -u usuario_bd -p'contraseña' nombre_bd > "$DUMP_FILE" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "    Volcado completado: $DUMP_FILE"
+    else
+        echo "    [!] Error en el volcado o sin permisos. Se omitirá."
+        rm -f "$DUMP_FILE"
+        DUMP_FILE=""
+    fi
+else
+    echo "    [!] mysqldump no está disponible. Se omitirá el volcado."
+    DUMP_FILE=""
+fi
+
+# --- PARTE 2: Crear archivo comprimido con tar ---
+echo "[+] Creando archivo comprimido con tar..."
+tar -czf "$BACKUP_FILE" \
+    "$HOME_DIR/.bash_history" \
+    "$HOME_DIR/.mysql_history" \
+    $DUMP_FILE 2>/dev/null
+
+if [ $? -eq 0 ]; then
+    echo "    Backup creado correctamente en: $BACKUP_FILE"
+else
+    echo "    [!] Error al crear el archivo comprimido."
+    exit 1
+fi
+
+# --- PARTE 3: Eliminar el volcado temporal ---
+[ -f "$DUMP_FILE" ] && rm -f "$DUMP_FILE"
+
+# --- PARTE 4: Mostrar comando rsync para descarga ---
+echo
+echo "=============================================="
+echo " Para descargar el backup desde otro equipo:"
+echo
+echo "   rsync -avz ${USUARIO}@<IP_SERVIDOR>:${BACKUP_FILE} ./"
+echo
+echo " Sustituya <IP_SERVIDOR> por la IP real del servidor."
+echo "=============================================="
+
+# --- PARTE 5: Control de versiones con Git ---
+echo "[+] Actualizando control de versiones con Git..."
+if [ ! -d "$HOME_DIR/practicasISE" ]; then
+    mkdir "$HOME_DIR/practicasISE"
+    cd "$HOME_DIR/practicasISE" || exit
+    git init -q
+else
+    cd "$HOME_DIR/practicasISE" || exit
+fi
+
+cp "$BACKUP_FILE" .
+git add .
+git commit -m "Backup realizado el $FECHA" >/dev/null 2>&1
+echo "    Backup registrado en Git correctamente."
+echo "Hecho"
